@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+
   mysql:
     image: mysql:8.0
     container_name: shopizer-mysql
@@ -11,6 +12,8 @@ services:
       MYSQL_PASSWORD: shopizer-password
     ports:
       - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
@@ -18,7 +21,7 @@ services:
       retries: 5
 
   shopizer:
-    image: shopizer-local:latest
+    image: ghcr.io/rishabhgupta9695/shopizer:latest
     container_name: shopizer-app
     depends_on:
       mysql:
@@ -33,5 +36,22 @@ services:
       db.driverClass: com.mysql.cj.jdbc.Driver
       hibernate.dialect: org.hibernate.dialect.MySQL8Dialect
       hibernate.hbm2ddl.auto: update
-      elasticsearch.security.password: "NO"
-      elasticsearch.mode: "embedded"
+
+  shopizer-admin:
+    image: ghcr.io/rishabhgupta9695/shopizer-admin:latest
+    container_name: shopizer-admin
+    ports:
+      - "4200:80"
+    depends_on:
+      - shopizer
+
+  shopizer-shop:
+    image: ghcr.io/rishabhgupta9695/shopizer-shop:latest
+    container_name: shopizer-shop
+    ports:
+      - "3000:80"
+    depends_on:
+      - shopizer
+
+volumes:
+  mysql-data:
