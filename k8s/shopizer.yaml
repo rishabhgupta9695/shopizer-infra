@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shopizer
+  namespace: shopizer
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: shopizer
+  template:
+    metadata:
+      labels:
+        app: shopizer
+    spec:
+      containers:
+        - name: shopizer
+          image: ghcr.io/rishabhgupta9695/shopizer:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: mysql
+            - name: db.jdbcUrl
+              value: "jdbc:mysql://mysql:3306/SALESMANAGER?autoReconnect=true&useUnicode=true&characterEncoding=UTF-8"
+            - name: db.user
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: user
+            - name: db.password
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: password
+            - name: db.driverClass
+              value: com.mysql.cj.jdbc.Driver
+            - name: hibernate.dialect
+              value: org.hibernate.dialect.MySQL8Dialect
+            - name: hibernate.hbm2ddl.auto
+              value: update
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shopizer
+  namespace: shopizer
+spec:
+  selector:
+    app: shopizer
+  ports:
+    - port: 8080
+      targetPort: 8080
