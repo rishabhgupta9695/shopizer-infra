@@ -13,6 +13,8 @@ spec:
       labels:
         app: shopizer
     spec:
+      imagePullSecrets:
+        - name: ghcr-secret
       containers:
         - name: shopizer
           image: ghcr.io/rishabhgupta9695/shopizer:latest
