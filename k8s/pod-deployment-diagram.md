@@ -18,58 +18,57 @@
 ║  │  └──────────────────┘                        Service: shopizer:8080             │  ║
 ║  │                                                                                 │  ║
 ║  │  ┌───────────────────────────────────────────────────────────────────────────┐  │  ║
-║  │  │                   Deployment: shopizer-admin  (x3)                        │  │  ║
-║  │  │  ┌─────────────┐       ┌─────────────┐       ┌─────────────┐             │  │  ║
-║  │  │  │   Pod 1     │       │   Pod 2     │       │   Pod 3     │             │  │  ║
-║  │  │  │  nginx:80   │       │  nginx:80   │       │  nginx:80   │             │  │  ║
-║  │  │  │  Angular    │       │  Angular    │       │  Angular    │             │  │  ║
-║  │  │  └─────────────┘       └─────────────┘       └─────────────┘             │  │  ║
+║  │  │              Deployment: shopizer-frontend  (x3)                          │  │  ║
+║  │  │         Single nginx image serving BOTH admin and shop                    │  │  ║
+║  │  │                                                                           │  │  ║
+║  │  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐          │  │  ║
+║  │  │  │     Pod 1       │  │     Pod 2       │  │     Pod 3       │          │  │  ║
+║  │  │  │  nginx:80       │  │  nginx:80       │  │  nginx:80       │          │  │  ║
+║  │  │  │                 │  │                 │  │                 │          │  │  ║
+║  │  │  │ /admin → Angular│  │ /admin → Angular│  │ /admin → Angular│          │  │  ║
+║  │  │  │ /shop  → React  │  │ /shop  → React  │  │ /shop  → React  │          │  │  ║
+║  │  │  └─────────────────┘  └─────────────────┘  └─────────────────┘          │  │  ║
 ║  │  └───────────────────────────────────────────────────────────────────────────┘  │  ║
-║  │                              NodePort: 30200 → localhost:30200                  │  ║
-║  │                                                                                 │  ║
-║  │  ┌───────────────────────────────────────────────────────────────────────────┐  │  ║
-║  │  │                   Deployment: shopizer-shop  (x3)                         │  │  ║
-║  │  │  ┌─────────────┐       ┌─────────────┐       ┌─────────────┐             │  │  ║
-║  │  │  │   Pod 1     │       │   Pod 2     │       │   Pod 3     │             │  │  ║
-║  │  │  │  nginx:80   │       │  nginx:80   │       │  nginx:80   │             │  │  ║
-║  │  │  │   React     │       │   React     │       │   React     │             │  │  ║
-║  │  │  └─────────────┘       └─────────────┘       └─────────────┘             │  │  ║
-║  │  └───────────────────────────────────────────────────────────────────────────┘  │  ║
-║  │                              NodePort: 30300 → localhost:30300                  │  ║
+║  │                         NodePort: 30200 → localhost:30200                       │  ║
 ║  │                                                                                 │  ║
 ║  └─────────────────────────────────────────────────────────────────────────────────┘  ║
 ║                                                                                       ║
 ╚═══════════════════════════════════════════════════════════════════════════════════════╝
-              ▲                    ▲                    ▲
-              │           kubectl apply -f k8s/         │
-              │                                         │
-╔═════════════╪═════════════════════════════════════════╪═════════════════════════════╗
-║             │      ghcr.io (GitHub Container Registry)│                             ║
-║  ┌──────────┴───────┐  ┌──────────────────┐  ┌───────┴──────────┐                 ║
-║  │ shopizer:latest  │  │shopizer-admin:   │  │ shopizer-shop:   │                 ║
-║  │                  │  │      latest      │  │     latest       │                 ║
-║  └──────────────────┘  └──────────────────┘  └──────────────────┘                 ║
+              ▲                              ▲
+              │        kubectl apply -f k8s/ │
+              │                             │
+╔═════════════╪═════════════════════════════╪══════════════════════════════════════════╗
+║             │   ghcr.io (GitHub Container Registry)                                 ║
+║  ┌──────────┴───────────┐        ┌────────┴─────────────────────────────────┐       ║
+║  │  shopizer:latest     │        │       shopizer-frontend:latest           │       ║
+║  │  (Spring Boot)       │        │  built from nginx/Dockerfile             │       ║
+║  │                      │        │  copies admin + shop into one image      │       ║
+║  └──────────────────────┘        └──────────────────────────────────────────┘       ║
 ╚═════════════════════════════════════════════════════════════════════════════════════╝
-              ▲                    ▲                    ▲
-              │         GitHub Actions pushes images    │
-              └────────────────────┴────────────────────┘
+              ▲                              ▲
+              │                             │
+   shopizer repo CI                shopizer-infra CI
+   (auto on push)            ("Build Frontend Image" workflow)
+              ▲                             ▲
+              │                            pulls from
+   git push shopizer             shopizer-admin:latest
+                                 shopizer-shop:latest
 
 
 ACCESS URLS
 ───────────
-  Admin panel  →  http://localhost:30200
-  Storefront   →  http://localhost:30300
+  Admin panel  →  http://localhost:30200/admin
+  Storefront   →  http://localhost:30200/shop
   Backend API  →  http://localhost:8080/swagger-ui.html
 
 
 POD COUNT SUMMARY
 ─────────────────
-  mysql           1 pod   (stateful, single instance)
-  shopizer        3 pods  (load balanced via ClusterIP service)
-  shopizer-admin  3 pods  (load balanced via NodePort 30200)
-  shopizer-shop   3 pods  (load balanced via NodePort 30300)
-  ─────────────────────────────────────────────────────
-  Total           10 pods
+  mysql               1 pod   (stateful, single instance with PVC)
+  shopizer            3 pods  (load balanced via ClusterIP service)
+  shopizer-frontend   3 pods  (nginx, serves /admin + /shop via NodePort 30200)
+  ─────────────────────────────────────────────────────────────────
+  Total               7 pods
 
 
 DEPLOY COMMANDS
@@ -78,13 +77,11 @@ DEPLOY COMMANDS
   kubectl apply -f k8s/namespace.yaml
   kubectl apply -f k8s/mysql.yaml
   kubectl apply -f k8s/shopizer.yaml
-  kubectl apply -f k8s/shopizer-admin.yaml
-  kubectl apply -f k8s/shopizer-shop.yaml
+  kubectl apply -f k8s/shopizer-frontend.yaml
   kubectl get pods -n shopizer
 
 UPDATE AFTER NEW CI BUILD
 ──────────────────────────
   kubectl rollout restart deployment/shopizer -n shopizer
-  kubectl rollout restart deployment/shopizer-admin -n shopizer
-  kubectl rollout restart deployment/shopizer-shop -n shopizer
+  kubectl rollout restart deployment/shopizer-frontend -n shopizer
 ```
