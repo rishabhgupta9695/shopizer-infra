@@ -1,0 +1,38 @@
+name: Deploy to Colima
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'Which app to deploy'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - shopizer
+          - shopizer-frontend
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Deploy all
+        if: github.event.inputs.app == 'all'
+        run: |
+          kubectl rollout restart deployment/shopizer -n shopizer
+          kubectl rollout restart deployment/shopizer-frontend -n shopizer
+          kubectl rollout status deployment/shopizer -n shopizer
+          kubectl rollout status deployment/shopizer-frontend -n shopizer
+
+      - name: Deploy shopizer backend
+        if: github.event.inputs.app == 'shopizer'
+        run: |
+          kubectl rollout restart deployment/shopizer -n shopizer
+          kubectl rollout status deployment/shopizer -n shopizer
+
+      - name: Deploy shopizer frontend
+        if: github.event.inputs.app == 'shopizer-frontend'
+        run: |
+          kubectl rollout restart deployment/shopizer-frontend -n shopizer
+          kubectl rollout status deployment/shopizer-frontend -n shopizer
