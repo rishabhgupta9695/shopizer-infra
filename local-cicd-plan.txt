@@ -1,168 +1,182 @@
 LOCAL CI-CD PLAN — GITHUB ACTIONS + COLIMA
 ==========================================
-Date: 2026-03-26
+Date: 2026-03-26 (updated: pod-based deployment)
 
 HOW IT ALL FITS TOGETHER
 -------------------------
-Your GitHub Actions pipelines already:
+Your GitHub Actions pipelines:
   - Build each app
   - Run tests
   - Push Docker images to GitHub Container Registry (ghcr.io)
 
-What this plan adds:
-  - Pull those images locally using Colima
-  - Run all 3 apps + MySQL with one command
+Two deployment options are available:
+  Option A — docker-compose  (simple, single container per app)
+  Option B — Kubernetes pods (3 replicas per app, recommended)
 
-Flow:
-  You push code to GitHub
-    → GitHub Actions builds & pushes image to ghcr.io
-    → On your Mac: docker-compose pull && docker-compose up -d
-    → Apps are live at localhost
+Image locations:
+  Backend          → ghcr.io/rishabhgupta9695/shopizer:latest
+  Frontend (combined) → ghcr.io/rishabhgupta9695/shopizer-frontend:latest
+    (single nginx serving both Angular admin at /admin and React shop at /shop)
 
-Image locations (from your CI files):
-  Backend  → ghcr.io/<your-github-username>/shopizer:latest
-  Admin    → ghcr.io/<your-github-username>/shopizer-admin:latest
-  Shop     → ghcr.io/<your-github-username>/shopizer-shop:latest
+Note: Admin and Shop are combined into one nginx image to reduce pod count.
+      The combined image is built from nginx/Dockerfile in shopizer-infra repo.
 
 
-PART 1 — ONE-TIME SETUP
-========================
+PART 1 — ONE-TIME SETUP (both options)
+========================================
 
-Step 1: Install Colima + Docker tools
---------------------------------------
-Open Terminal and run:
+Step 1: Install tools
+----------------------
+  brew install colima docker docker-compose kubectl
 
-  brew install colima docker docker-compose
+Step 2: Authenticate with GitHub Container Registry
+-----------------------------------------------------
+  2a. Go to: https://github.com/settings/tokens
+  2b. Generate new token (classic) with read:packages scope
+  2c. Run:
+      echo "YOUR_TOKEN" | docker login ghcr.io -u rishabhgupta9695 --password-stdin
 
-Step 2: Start Colima
----------------------
+
+OPTION A — DOCKER-COMPOSE (simple)
+=====================================
+
+Start Colima:
   colima start --cpu 4 --memory 6 --disk 60
 
-  Verify it works:
-  docker ps
-  → Should show an empty table with no errors
+Deploy:
+  cd /Users/rishabhgupta/Documents/shopizer-infra
+  docker-compose pull && docker-compose up -d
 
-Step 3: Authenticate with GitHub Container Registry
------------------------------------------------------
-GitHub Actions pushes images to ghcr.io (GitHub's image registry).
-You need a token to pull from it locally.
+Access:
+  Backend   →  http://localhost:8080/swagger-ui.html
+  Admin     →  http://localhost:4200
+  Shop      →  http://localhost:3000
 
-  3a. Go to: https://github.com/settings/tokens
-  3b. Click "Generate new token (classic)"
-  3c. Give it a name e.g. "local-docker"
-  3d. Check the box: read:packages
-  3e. Click Generate — copy the token
+Update after new CI build:
+  docker-compose pull && docker-compose up -d
 
-  3f. Back in Terminal:
-      echo "YOUR_TOKEN_HERE" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-
-  Replace YOUR_TOKEN_HERE and YOUR_GITHUB_USERNAME with your actual values.
-
-  You only need to do this once. Docker saves the credentials.
-
-
-PART 2 — UPDATE docker-compose.yml
-=====================================
-Replace YOUR_GITHUB_USERNAME in the file below with your actual GitHub username
-(the same one that owns the shopizer repos).
-
-File is already at:
-  /Users/rishabhgupta/Documents/shopizer/docker-compose.yml
-
-It has been updated to use ghcr.io images. Just replace YOUR_GITHUB_USERNAME.
-
-  sed -i '' 's/YOUR_GITHUB_USERNAME/your-actual-username/g' \
-    /Users/rishabhgupta/Documents/shopizer/docker-compose.yml
-
-
-PART 3 — DAILY WORKFLOW
-=========================
-
-Start everything (first time or after a fresh boot):
-  cd /Users/rishabhgupta/Documents/shopizer
-  docker-compose up -d
-
-After GitHub Actions finishes a new build (you pushed code):
-  docker-compose pull        ← pulls the new images from ghcr.io
-  docker-compose up -d       ← restarts containers that have new images
-
-Open the apps:
-  Backend API + Swagger  →  http://localhost:8080/swagger-ui.html
-  Admin panel            →  http://localhost:4200
-  Storefront             →  http://localhost:3000
-
-Stop everything:
+Stop:
   docker-compose down
+  docker-compose down -v   ← also wipes MySQL data
 
-Full reset (wipes MySQL data too):
-  docker-compose down -v
+
+OPTION B — KUBERNETES PODS (recommended, 3 replicas each)
+===========================================================
+
+Start Colima with Kubernetes:
+  colima start --cpu 4 --memory 6 --disk 60 --kubernetes
+
+Create pull secret for ghcr.io:
+  kubectl create secret docker-registry ghcr-secret \
+    --docker-server=ghcr.io \
+    --docker-username=rishabhgupta9695 \
+    --docker-password=YOUR_GITHUB_TOKEN \
+    --namespace=shopizer
+
+Deploy all:
+  cd /Users/rishabhgupta/Documents/shopizer-infra
+  kubectl apply -f k8s/namespace.yaml
+  kubectl apply -f k8s/mysql.yaml
+  kubectl apply -f k8s/shopizer.yaml
+  kubectl apply -f k8s/shopizer-frontend.yaml
+
+Verify pods (expect 7 total):
+  kubectl get pods -n shopizer
+
+  mysql              × 1
+  shopizer           × 3
+  shopizer-frontend  × 3  (nginx serving admin + shop)
+
+Access:
+  Backend   →  http://localhost:8080/swagger-ui.html
+  Admin     →  http://localhost:30200/admin
+  Shop      →  http://localhost:30200/shop
+
+Update after new CI build:
+  kubectl rollout restart deployment/shopizer -n shopizer
+  kubectl rollout restart deployment/shopizer-frontend -n shopizer
+
+Tear down:
+  kubectl delete namespace shopizer
+
+
+PART 2 — BUILDING THE COMBINED FRONTEND IMAGE
+===============================================
+Admin and Shop are served by a single nginx image.
+It must be rebuilt whenever either frontend app changes.
+
+Trigger the build manually:
+  GitHub → shopizer-infra repo → Actions → "Build Frontend Image" → Run workflow
+
+Or it triggers automatically on push to main when nginx/ files change.
+
+The Dockerfile (nginx/Dockerfile) pulls both CI images and combines them:
+  /usr/share/nginx/admin  ← Angular admin
+  /usr/share/nginx/shop   ← React shop
+
+
+PART 3 — COMPLETE CI-CD FLOW
+==============================
+
+  1. Push code to shopizer / shopizer-admin / shopizer-shop repos
+         ↓
+  2. GitHub Actions builds, tests, pushes image to ghcr.io
+         ↓
+  3. For frontend changes: trigger "Build Frontend Image" in shopizer-infra
+         ↓
+  4. Deploy update:
+       docker-compose:  docker-compose pull && docker-compose up -d
+       kubernetes:      kubectl rollout restart deployment/... -n shopizer
+         ↓
+  5. New version live at localhost
 
 
 PART 4 — VIEW LOGS
 ===================
-All apps:
+docker-compose:
   docker-compose logs -f
-
-One app:
   docker-compose logs -f shopizer
-  docker-compose logs -f shopizer-admin
-  docker-compose logs -f shopizer-shop
+
+kubernetes:
+  kubectl logs -f deployment/shopizer -n shopizer
+  kubectl logs -f deployment/shopizer-frontend -n shopizer
 
 
 PART 5 — TROUBLESHOOTING
 ==========================
 
 Problem: "unauthorized" when pulling images
-Fix:     Re-run the docker login command from Step 3f
-         Make sure your token has read:packages scope
-         Make sure the GitHub repo packages are set to "public" or
-         your token belongs to the repo owner account
+Fix:     Re-run docker login from Part 1 Step 2
 
 Problem: "Cannot connect to Docker daemon"
 Fix:     colima start
 
 Problem: Port 3306 already in use
 Fix:     brew services stop mysql
-         (you have a local MySQL running — stop it first)
 
-Problem: Admin or Shop shows blank page / can't reach backend
-Fix:     The frontend images use environment variables for the API URL.
-         By default they point to localhost:8080 which is correct for local.
-         If you changed ports, update the env vars in docker-compose.yml.
+Problem: Not enough memory
+Fix:     colima stop && colima start --cpu 4 --memory 8 --disk 60
 
-Problem: Not enough memory / containers keep crashing
-Fix:     colima stop
-         colima start --cpu 4 --memory 8 --disk 60
+Problem: Pods stuck in ImagePullBackOff
+Fix:     kubectl describe pod <pod-name> -n shopizer
+         Usually means ghcr-secret is missing or token expired
+         Re-create the secret from Part 1
 
 
-PART 6 — COMPLETE CI-CD FLOW
-==============================
-
-  1. Edit code locally
-         ↓
-  2. git push origin main
-         ↓
-  3. GitHub Actions triggers automatically:
-       - Builds the app
-       - Runs tests
-       - Builds Docker image
-       - Pushes to ghcr.io/<username>/shopizer:latest
-         (and tags with the commit SHA too)
-         ↓
-  4. On your Mac:
-       docker-compose pull && docker-compose up -d
-         ↓
-  5. New version running at localhost
-
-
-PART 7 — HOW TO CHECK WHICH IMAGE VERSION IS RUNNING
-======================================================
-  docker-compose ps              ← see container status
-  docker images | grep ghcr.io  ← see image tags and sizes
-  docker inspect shopizer-app | grep Image  ← see exact image SHA running
-
-
-FILES CHANGED
-=============
-  ~ /Users/rishabhgupta/Documents/shopizer/docker-compose.yml
-  + /Users/rishabhgupta/Documents/local-cicd-plan.txt  (this file)
+REPO STRUCTURE (shopizer-infra)
+================================
+  docker-compose.yml              ← Option A deployment
+  k8s/
+    namespace.yaml                ← Kubernetes namespace
+    mysql.yaml                    ← MySQL deployment + service + PVC
+    shopizer.yaml                 ← Backend (3 replicas)
+    shopizer-frontend.yaml        ← Combined nginx frontend (3 replicas)
+    pod-deployment-diagram.md     ← Kubernetes architecture diagram
+    README.md                     ← Kubernetes deploy instructions
+  nginx/
+    Dockerfile                    ← Builds combined admin+shop image
+    nginx.conf                    ← Routes /admin and /shop
+  .github/workflows/
+    build-frontend.yml            ← CI to build combined frontend image
+  colima-deployment-diagram.md    ← Overall architecture diagram
+  local-cicd-plan.txt             ← This file
