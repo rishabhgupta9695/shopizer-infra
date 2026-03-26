@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: shopizer-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: SALESMANAGER
+      MYSQL_USER: shopizer
+      MYSQL_PASSWORD: shopizer-password
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  shopizer:
+    image: shopizer-local:latest
+    container_name: shopizer-app
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: mysql
+      db.jdbcUrl: "jdbc:mysql://mysql:3306/SALESMANAGER?autoReconnect=true&useUnicode=true&characterEncoding=UTF-8"
+      db.user: shopizer
+      db.password: shopizer-password
+      db.driverClass: com.mysql.cj.jdbc.Driver
+      hibernate.dialect: org.hibernate.dialect.MySQL8Dialect
+      hibernate.hbm2ddl.auto: update
+      elasticsearch.security.password: "NO"
+      elasticsearch.mode: "embedded"

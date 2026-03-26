@@ -1,0 +1,168 @@
+LOCAL CI-CD PLAN — GITHUB ACTIONS + COLIMA
+==========================================
+Date: 2026-03-26
+
+HOW IT ALL FITS TOGETHER
+-------------------------
+Your GitHub Actions pipelines already:
+  - Build each app
+  - Run tests
+  - Push Docker images to GitHub Container Registry (ghcr.io)
+
+What this plan adds:
+  - Pull those images locally using Colima
+  - Run all 3 apps + MySQL with one command
+
+Flow:
+  You push code to GitHub
+    → GitHub Actions builds & pushes image to ghcr.io
+    → On your Mac: docker-compose pull && docker-compose up -d
+    → Apps are live at localhost
+
+Image locations (from your CI files):
+  Backend  → ghcr.io/<your-github-username>/shopizer:latest
+  Admin    → ghcr.io/<your-github-username>/shopizer-admin:latest
+  Shop     → ghcr.io/<your-github-username>/shopizer-shop:latest
+
+
+PART 1 — ONE-TIME SETUP
+========================
+
+Step 1: Install Colima + Docker tools
+--------------------------------------
+Open Terminal and run:
+
+  brew install colima docker docker-compose
+
+Step 2: Start Colima
+---------------------
+  colima start --cpu 4 --memory 6 --disk 60
+
+  Verify it works:
+  docker ps
+  → Should show an empty table with no errors
+
+Step 3: Authenticate with GitHub Container Registry
+-----------------------------------------------------
+GitHub Actions pushes images to ghcr.io (GitHub's image registry).
+You need a token to pull from it locally.
+
+  3a. Go to: https://github.com/settings/tokens
+  3b. Click "Generate new token (classic)"
+  3c. Give it a name e.g. "local-docker"
+  3d. Check the box: read:packages
+  3e. Click Generate — copy the token
+
+  3f. Back in Terminal:
+      echo "YOUR_TOKEN_HERE" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+
+  Replace YOUR_TOKEN_HERE and YOUR_GITHUB_USERNAME with your actual values.
+
+  You only need to do this once. Docker saves the credentials.
+
+
+PART 2 — UPDATE docker-compose.yml
+=====================================
+Replace YOUR_GITHUB_USERNAME in the file below with your actual GitHub username
+(the same one that owns the shopizer repos).
+
+File is already at:
+  /Users/rishabhgupta/Documents/shopizer/docker-compose.yml
+
+It has been updated to use ghcr.io images. Just replace YOUR_GITHUB_USERNAME.
+
+  sed -i '' 's/YOUR_GITHUB_USERNAME/your-actual-username/g' \
+    /Users/rishabhgupta/Documents/shopizer/docker-compose.yml
+
+
+PART 3 — DAILY WORKFLOW
+=========================
+
+Start everything (first time or after a fresh boot):
+  cd /Users/rishabhgupta/Documents/shopizer
+  docker-compose up -d
+
+After GitHub Actions finishes a new build (you pushed code):
+  docker-compose pull        ← pulls the new images from ghcr.io
+  docker-compose up -d       ← restarts containers that have new images
+
+Open the apps:
+  Backend API + Swagger  →  http://localhost:8080/swagger-ui.html
+  Admin panel            →  http://localhost:4200
+  Storefront             →  http://localhost:3000
+
+Stop everything:
+  docker-compose down
+
+Full reset (wipes MySQL data too):
+  docker-compose down -v
+
+
+PART 4 — VIEW LOGS
+===================
+All apps:
+  docker-compose logs -f
+
+One app:
+  docker-compose logs -f shopizer
+  docker-compose logs -f shopizer-admin
+  docker-compose logs -f shopizer-shop
+
+
+PART 5 — TROUBLESHOOTING
+==========================
+
+Problem: "unauthorized" when pulling images
+Fix:     Re-run the docker login command from Step 3f
+         Make sure your token has read:packages scope
+         Make sure the GitHub repo packages are set to "public" or
+         your token belongs to the repo owner account
+
+Problem: "Cannot connect to Docker daemon"
+Fix:     colima start
+
+Problem: Port 3306 already in use
+Fix:     brew services stop mysql
+         (you have a local MySQL running — stop it first)
+
+Problem: Admin or Shop shows blank page / can't reach backend
+Fix:     The frontend images use environment variables for the API URL.
+         By default they point to localhost:8080 which is correct for local.
+         If you changed ports, update the env vars in docker-compose.yml.
+
+Problem: Not enough memory / containers keep crashing
+Fix:     colima stop
+         colima start --cpu 4 --memory 8 --disk 60
+
+
+PART 6 — COMPLETE CI-CD FLOW
+==============================
+
+  1. Edit code locally
+         ↓
+  2. git push origin main
+         ↓
+  3. GitHub Actions triggers automatically:
+       - Builds the app
+       - Runs tests
+       - Builds Docker image
+       - Pushes to ghcr.io/<username>/shopizer:latest
+         (and tags with the commit SHA too)
+         ↓
+  4. On your Mac:
+       docker-compose pull && docker-compose up -d
+         ↓
+  5. New version running at localhost
+
+
+PART 7 — HOW TO CHECK WHICH IMAGE VERSION IS RUNNING
+======================================================
+  docker-compose ps              ← see container status
+  docker images | grep ghcr.io  ← see image tags and sizes
+  docker inspect shopizer-app | grep Image  ← see exact image SHA running
+
+
+FILES CHANGED
+=============
+  ~ /Users/rishabhgupta/Documents/shopizer/docker-compose.yml
+  + /Users/rishabhgupta/Documents/local-cicd-plan.txt  (this file)
