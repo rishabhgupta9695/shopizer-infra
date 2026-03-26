@@ -1,26 +1,26 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: shopizer-shop
+  name: shopizer-frontend
   namespace: shopizer
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: shopizer-shop
+      app: shopizer-frontend
   template:
     metadata:
       labels:
-        app: shopizer-shop
+        app: shopizer-frontend
     spec:
       containers:
-        - name: shopizer-shop
-          image: ghcr.io/rishabhgupta9695/shopizer-shop:latest
+        - name: shopizer-frontend
+          image: ghcr.io/rishabhgupta9695/shopizer-frontend:latest
           ports:
             - containerPort: 80
           readinessProbe:
             httpGet:
-              path: /
+              path: /health
               port: 80
             initialDelaySeconds: 10
             periodSeconds: 10
@@ -28,13 +28,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: shopizer-shop
+  name: shopizer-frontend
   namespace: shopizer
 spec:
   type: NodePort
   selector:
-    app: shopizer-shop
+    app: shopizer-frontend
   ports:
     - port: 80
       targetPort: 80
-      nodePort: 30300
+      nodePort: 30200
