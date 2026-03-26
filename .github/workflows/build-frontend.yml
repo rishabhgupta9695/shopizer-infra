@@ -31,3 +31,12 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/shopizer-frontend:latest
             ghcr.io/${{ github.repository_owner }}/shopizer-frontend:${{ github.sha }}
+
+  deploy:
+    needs: build
+    runs-on: self-hosted
+    steps:
+      - name: Rollout new frontend image
+        run: |
+          kubectl rollout restart deployment/shopizer-frontend -n shopizer
+          kubectl rollout status deployment/shopizer-frontend -n shopizer
