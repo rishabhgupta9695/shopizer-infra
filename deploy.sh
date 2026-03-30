@@ -50,7 +50,7 @@ kubectl rollout restart deployment/shopizer -n $NAMESPACE
 kubectl rollout restart deployment/shopizer-frontend -n $NAMESPACE
 
 echo "==> Waiting for rollout..."
-kubectl rollout status deployment/shopizer -n $NAMESPACE --timeout=300s
+kubectl rollout status deployment/shopizer -n $NAMESPACE --timeout=600s
 kubectl rollout status deployment/shopizer-frontend -n $NAMESPACE --timeout=120s
 
 echo ""

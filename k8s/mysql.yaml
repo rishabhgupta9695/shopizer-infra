@@ -27,6 +27,8 @@ metadata:
   namespace: shopizer
 spec:
   replicas: 1
+  strategy:
+    type: Recreate        # kill old pod before starting new one (required for MySQL)
   selector:
     matchLabels:
       app: mysql
