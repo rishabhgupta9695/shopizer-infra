@@ -36,7 +36,15 @@ jobs:
     needs: build
     runs-on: self-hosted
     steps:
+      - name: Pull latest images
+        run: |
+          docker pull ghcr.io/rishabhgupta9695/shopizer:latest
+          docker pull ghcr.io/rishabhgupta9695/shopizer-frontend:latest
+
       - name: Rollout new frontend image
         run: |
           kubectl rollout restart deployment/shopizer-frontend -n shopizer
-          kubectl rollout status deployment/shopizer-frontend -n shopizer
+          kubectl rollout status deployment/shopizer-frontend -n shopizer --timeout=120s
+
+      - name: Verify pods
+        run: kubectl get pods -n shopizer

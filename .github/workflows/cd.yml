@@ -1,0 +1,29 @@
+name: CD - Deploy All Apps
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [deploy-all]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Pull latest backend image
+        run: docker pull ghcr.io/rishabhgupta9695/shopizer:latest
+
+      - name: Pull latest frontend image
+        run: docker pull ghcr.io/rishabhgupta9695/shopizer-frontend:latest
+
+      - name: Deploy backend
+        run: |
+          kubectl rollout restart deployment/shopizer -n shopizer
+          kubectl rollout status deployment/shopizer -n shopizer --timeout=120s
+
+      - name: Deploy frontend
+        run: |
+          kubectl rollout restart deployment/shopizer-frontend -n shopizer
+          kubectl rollout status deployment/shopizer-frontend -n shopizer --timeout=120s
+
+      - name: Verify all pods running
+        run: kubectl get pods -n shopizer
