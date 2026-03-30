@@ -30,6 +30,11 @@ kubectl create secret docker-registry ghcr-secret \
 echo "==> Deploying MySQL..."
 kubectl apply -f k8s/mysql.yaml
 
+echo "==> Cleaning up any stuck MySQL pods..."
+kubectl delete pod -n $NAMESPACE -l app=mysql --field-selector=status.phase=Failed 2>/dev/null || true
+# delete crash-looping pods (restarts > 5)
+kubectl get pods -n $NAMESPACE -l app=mysql --no-headers | awk '$4 > 5 {print $1}' | xargs -r kubectl delete pod -n $NAMESPACE 2>/dev/null || true
+
 echo "==> Waiting for MySQL to be ready..."
 kubectl wait --for=condition=ready pod -l app=mysql -n $NAMESPACE --timeout=120s 2>/dev/null || \
   echo "MySQL already running, continuing..."
