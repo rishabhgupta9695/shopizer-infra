@@ -17,6 +17,6 @@
 |-----|-----|
 | API / Swagger | http://localhost:8080/swagger-ui.html |
 | Shop | http://localhost:30200 |
-| Admin | http://localhost:30300 |
+| Admin | http://localhost:30200/admin |
 
 Login: `admin@shopizer.com` / `password`
