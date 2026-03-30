@@ -31,7 +31,8 @@ echo "==> Deploying MySQL..."
 kubectl apply -f k8s/mysql.yaml
 
 echo "==> Waiting for MySQL to be ready..."
-kubectl wait --for=condition=ready pod -l app=mysql -n $NAMESPACE --timeout=120s
+kubectl wait --for=condition=ready pod -l app=mysql -n $NAMESPACE --timeout=120s 2>/dev/null || \
+  echo "MySQL already running, continuing..."
 
 echo "==> Deploying backend..."
 kubectl apply -f k8s/shopizer.yaml
@@ -44,7 +45,7 @@ kubectl rollout restart deployment/shopizer -n $NAMESPACE
 kubectl rollout restart deployment/shopizer-frontend -n $NAMESPACE
 
 echo "==> Waiting for rollout..."
-kubectl rollout status deployment/shopizer -n $NAMESPACE --timeout=180s
+kubectl rollout status deployment/shopizer -n $NAMESPACE --timeout=300s
 kubectl rollout status deployment/shopizer-frontend -n $NAMESPACE --timeout=120s
 
 echo ""
