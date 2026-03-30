@@ -16,6 +16,10 @@ echo "==> Pulling latest images..."
 docker pull ghcr.io/$GITHUB_USER/shopizer:latest
 docker pull ghcr.io/$GITHUB_USER/shopizer-frontend:latest
 
+echo "==> Cleaning up existing deployments..."
+kubectl delete namespace $NAMESPACE --ignore-not-found=true
+kubectl wait --for=delete namespace/$NAMESPACE --timeout=60s 2>/dev/null || true
+
 echo "==> Creating namespace..."
 kubectl apply -f k8s/namespace.yaml
 
