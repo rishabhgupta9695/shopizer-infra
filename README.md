@@ -12,72 +12,29 @@
 ## Prerequisites
 - Colima running with Kubernetes enabled
 - kubectl installed
+- GitHub token with `read:packages` scope
 
-## One-time setup
-
-### 1. Start Colima with Kubernetes
-```bash
-colima start --cpu 4 --memory 6 --disk 60 --kubernetes
-```
-
-### 2. Create GHCR pull secret
-```bash
-kubectl create secret docker-registry ghcr-secret \
-  --docker-server=ghcr.io \
-  --docker-username=rishabhgupta9695 \
-  --docker-password=YOUR_GITHUB_TOKEN \
-  --namespace=shopizer
-```
-
-## Deploy
+## Deploy (one command)
 
 ```bash
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/mysql.yaml
-kubectl apply -f k8s/shopizer.yaml
-kubectl apply -f k8s/shopizer-frontend.yaml
+./deploy.sh
 ```
 
-### Deploy Admin (Order Stats dashboard)
-```bash
-kubectl apply -n shopizer -f - <<EOF
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: shopizer-admin
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: shopizer-admin
-  template:
-    metadata:
-      labels:
-        app: shopizer-admin
-    spec:
-      containers:
-      - name: shopizer-admin
-        image: ghcr.io/rishabhgupta9695/shopizer-admin:latest
-        ports:
-        - containerPort: 80
-        env:
-        - name: APP_BASE_URL
-          value: "http://shopizer:8080/api"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: shopizer-admin
-spec:
-  type: NodePort
-  selector:
-    app: shopizer-admin
-  ports:
-  - port: 80
-    targetPort: 80
-    nodePort: 30300
-EOF
-```
+The script will:
+1. Start Colima with Kubernetes (if not running)
+2. Prompt for your GitHub token to pull images from GHCR
+3. Deploy MySQL, backend, shop frontend and admin dashboard
+4. Set up port-forwards so all apps are accessible on localhost
+
+## Access the apps
+
+After running `deploy.sh`:
+
+| App | URL | Credentials |
+|-----|-----|-------------|
+| Backend API / Swagger | http://localhost:8080/swagger-ui.html | admin@shopizer.com / password |
+| Shop Frontend | http://localhost:30200 | - |
+| Admin Dashboard | http://localhost:30300 | admin@shopizer.com / password |
 
 ## Check status
 
@@ -86,37 +43,7 @@ kubectl get pods -n shopizer
 kubectl get svc -n shopizer
 ```
 
-Expected services:
-```
-NAME                TYPE        PORT(S)
-mysql               ClusterIP   3306/TCP
-shopizer            NodePort    8080:30080/TCP
-shopizer-frontend   NodePort    80:30200/TCP
-shopizer-admin      NodePort    80:30300/TCP
-```
-
-## Access the apps
-
-Colima runs in a VM — use port-forward to access from your Mac:
-
-```bash
-kubectl port-forward svc/shopizer 8080:8080 -n shopizer &
-kubectl port-forward svc/shopizer-frontend 30200:80 -n shopizer &
-kubectl port-forward svc/shopizer-admin 30300:80 -n shopizer &
-```
-
-| App | URL | Credentials |
-|-----|-----|-------------|
-| Backend API / Swagger | http://localhost:8080/swagger-ui.html | admin@shopizer.com / password |
-| Shop Frontend | http://localhost:30200 | - |
-| Admin Dashboard | http://localhost:30300 | admin@shopizer.com / password |
-
-> **Note:** When using port-forward, update the admin backend URL:
-> ```bash
-> kubectl set env deployment/shopizer-admin APP_BASE_URL=http://localhost:8080/api -n shopizer
-> ```
-
-## Update to latest image after CI build
+## Update to latest images after a CI build
 
 ```bash
 kubectl rollout restart deployment/shopizer -n shopizer
